@@ -14,9 +14,14 @@
 #import "AELimiterFilter.h"
 #import "AERecorder.h"
 #import "AEReverbFilter.h"
+#import "AEMixerBuffer.h"
 #import <QuartzCore/QuartzCore.h>
 
 static const int kInputChannelsChangedContext;
+
+@interface AERecorder (PrivateAdditions)
+@property (nonatomic, strong, readonly) AEMixerBuffer *mixer;
+@end
 
 @interface ViewController () {
     AudioFileID _audioUnitFile;
@@ -162,7 +167,7 @@ static const int kInputChannelsChangedContext;
 -(void)dealloc {
     self.audioController = nil;
     
-    if ( _levelsTimer ) [_levelsTimer invalidate];    
+    if ( _levelsTimer ) [_levelsTimer invalidate];
 }
 
 -(void)viewDidLoad {
@@ -327,7 +332,7 @@ static const int kInputChannelsChangedContext;
                 }
             }
             break;
-        } 
+        }
         case 1: {
             switch ( indexPath.row ) {
                 case 0: {
@@ -435,12 +440,12 @@ static const int kInputChannelsChangedContext;
                     
                     int channelCount = _audioController.numberOfInputChannels;
                     CGSize buttonSize = CGSizeMake(30, 30);
-
+                    
                     UIScrollView *channelStrip = [[UIScrollView alloc] initWithFrame:CGRectMake(0,
-                                                                                                 0,
-                                                                                                 MIN(channelCount * (buttonSize.width+5) + 5,
-                                                                                                     isiPad ? 400 : 200),
-                                                                                                 cell.bounds.size.height)];
+                                                                                                0,
+                                                                                                MIN(channelCount * (buttonSize.width+5) + 5,
+                                                                                                    isiPad ? 400 : 200),
+                                                                                                cell.bounds.size.height)];
                     channelStrip.autoresizingMask = UIViewAutoresizingFlexibleHeight | UIViewAutoresizingFlexibleWidth;
                     channelStrip.backgroundColor = [UIColor clearColor];
                     
@@ -528,46 +533,46 @@ static const int kInputChannelsChangedContext;
     
     // Set the file to play
     AECheckOSStatus(AudioUnitSetProperty(_audioUnitPlayer.audioUnit, kAudioUnitProperty_ScheduledFileIDs, kAudioUnitScope_Global, 0, &_audioUnitFile, sizeof(_audioUnitFile)),
-                "AudioUnitSetProperty(kAudioUnitProperty_ScheduledFileIDs)");
-
+                    "AudioUnitSetProperty(kAudioUnitProperty_ScheduledFileIDs)");
+    
     // Determine file properties
     UInt64 packetCount;
-	UInt32 size = sizeof(packetCount);
-	AECheckOSStatus(AudioFileGetProperty(_audioUnitFile, kAudioFilePropertyAudioDataPacketCount, &size, &packetCount),
-                "AudioFileGetProperty(kAudioFilePropertyAudioDataPacketCount)");
-	
-	AudioStreamBasicDescription dataFormat;
-	size = sizeof(dataFormat);
-	AECheckOSStatus(AudioFileGetProperty(_audioUnitFile, kAudioFilePropertyDataFormat, &size, &dataFormat),
-                "AudioFileGetProperty(kAudioFilePropertyDataFormat)");
+    UInt32 size = sizeof(packetCount);
+    AECheckOSStatus(AudioFileGetProperty(_audioUnitFile, kAudioFilePropertyAudioDataPacketCount, &size, &packetCount),
+                    "AudioFileGetProperty(kAudioFilePropertyAudioDataPacketCount)");
     
-	// Assign the region to play
-	ScheduledAudioFileRegion region;
-	memset (&region.mTimeStamp, 0, sizeof(region.mTimeStamp));
-	region.mTimeStamp.mFlags = kAudioTimeStampSampleTimeValid;
-	region.mTimeStamp.mSampleTime = 0;
-	region.mCompletionProc = NULL;
-	region.mCompletionProcUserData = NULL;
-	region.mAudioFile = _audioUnitFile;
-	region.mLoopCount = 0;
-	region.mStartFrame = 0;
-	region.mFramesToPlay = (UInt32)packetCount * dataFormat.mFramesPerPacket;
-	AECheckOSStatus(AudioUnitSetProperty(_audioUnitPlayer.audioUnit, kAudioUnitProperty_ScheduledFileRegion, kAudioUnitScope_Global, 0, &region, sizeof(region)),
-                "AudioUnitSetProperty(kAudioUnitProperty_ScheduledFileRegion)");
-	
-	// Prime the player by reading some frames from disk
-	UInt32 defaultNumberOfFrames = 0;
-	AECheckOSStatus(AudioUnitSetProperty(_audioUnitPlayer.audioUnit, kAudioUnitProperty_ScheduledFilePrime, kAudioUnitScope_Global, 0, &defaultNumberOfFrames, sizeof(defaultNumberOfFrames)),
-                "AudioUnitSetProperty(kAudioUnitProperty_ScheduledFilePrime)");
+    AudioStreamBasicDescription dataFormat;
+    size = sizeof(dataFormat);
+    AECheckOSStatus(AudioFileGetProperty(_audioUnitFile, kAudioFilePropertyDataFormat, &size, &dataFormat),
+                    "AudioFileGetProperty(kAudioFilePropertyDataFormat)");
+    
+    // Assign the region to play
+    ScheduledAudioFileRegion region;
+    memset (&region.mTimeStamp, 0, sizeof(region.mTimeStamp));
+    region.mTimeStamp.mFlags = kAudioTimeStampSampleTimeValid;
+    region.mTimeStamp.mSampleTime = 0;
+    region.mCompletionProc = NULL;
+    region.mCompletionProcUserData = NULL;
+    region.mAudioFile = _audioUnitFile;
+    region.mLoopCount = 0;
+    region.mStartFrame = 0;
+    region.mFramesToPlay = (UInt32)packetCount * dataFormat.mFramesPerPacket;
+    AECheckOSStatus(AudioUnitSetProperty(_audioUnitPlayer.audioUnit, kAudioUnitProperty_ScheduledFileRegion, kAudioUnitScope_Global, 0, &region, sizeof(region)),
+                    "AudioUnitSetProperty(kAudioUnitProperty_ScheduledFileRegion)");
+    
+    // Prime the player by reading some frames from disk
+    UInt32 defaultNumberOfFrames = 0;
+    AECheckOSStatus(AudioUnitSetProperty(_audioUnitPlayer.audioUnit, kAudioUnitProperty_ScheduledFilePrime, kAudioUnitScope_Global, 0, &defaultNumberOfFrames, sizeof(defaultNumberOfFrames)),
+                    "AudioUnitSetProperty(kAudioUnitProperty_ScheduledFilePrime)");
     
     // Set the start time (now = -1)
     AudioTimeStamp startTime;
-	memset (&startTime, 0, sizeof(startTime));
-	startTime.mFlags = kAudioTimeStampSampleTimeValid;
-	startTime.mSampleTime = -1;
-	AECheckOSStatus(AudioUnitSetProperty(_audioUnitPlayer.audioUnit, kAudioUnitProperty_ScheduleStartTimeStamp, kAudioUnitScope_Global, 0, &startTime, sizeof(startTime)),
-			   "AudioUnitSetProperty(kAudioUnitProperty_ScheduleStartTimeStamp)");
-
+    memset (&startTime, 0, sizeof(startTime));
+    startTime.mFlags = kAudioTimeStampSampleTimeValid;
+    startTime.mSampleTime = -1;
+    AECheckOSStatus(AudioUnitSetProperty(_audioUnitPlayer.audioUnit, kAudioUnitProperty_ScheduleStartTimeStamp, kAudioUnitScope_Global, 0, &startTime, sizeof(startTime)),
+                    "AudioUnitSetProperty(kAudioUnitProperty_ScheduleStartTimeStamp)");
+    
 }
 
 - (void)playthroughSwitchChanged:(UISwitch*)sender {
@@ -585,9 +590,21 @@ static const int kInputChannelsChangedContext;
 - (void)inputRecordSwitchChanged:(UISwitch*)sender {
     if ( sender.isOn ) {
         _inputRecordingEnabled = true;
+        [self unmuteMicrophone];
     } else {
+        [self muteMicrophone];
         _inputRecordingEnabled = false;
     }
+}
+
+- (void)muteMicrophone {
+    [self.recorder.mixer setVolume:0 forSource:AEAudioSourceInput];
+    NSLog(@"mic is muted");
+}
+
+- (void)unmuteMicrophone {
+    [self.recorder.mixer setVolume:1 forSource:AEAudioSourceInput];
+    NSLog(@"mic is unmuted");
 }
 
 - (void)measurementModeSwitchChanged:(UISwitch*)sender {
@@ -673,10 +690,7 @@ static const int kInputChannelsChangedContext;
     if ( _recorder ) {
         [_recorder finishRecording];
         [_audioController removeOutputReceiver:_recorder];
-        // Remove the input receiver, if _inputRecordingEnabled == true
-        if (_inputRecordingEnabled) {
-            [_audioController removeInputReceiver:_recorder];
-        }
+        [_audioController removeInputReceiver:_recorder];
         self.recorder = nil;
         _recordButton.selected = NO;
     } else {
@@ -685,11 +699,11 @@ static const int kInputChannelsChangedContext;
         NSString *path = [documentsFolders[0] stringByAppendingPathComponent:@"Recording.m4a"];
         NSError *error = nil;
         if ( ![_recorder beginRecordingToFileAtPath:path fileType:kAudioFileM4AType error:&error] ) {
-            [[[UIAlertView alloc] initWithTitle:@"Error" 
-                                         message:[NSString stringWithFormat:@"Couldn't start recording: %@", [error localizedDescription]]
-                                        delegate:nil
-                               cancelButtonTitle:nil
-                               otherButtonTitles:@"OK", nil] show];
+            [[[UIAlertView alloc] initWithTitle:@"Error"
+                                        message:[NSString stringWithFormat:@"Couldn't start recording: %@", [error localizedDescription]]
+                                       delegate:nil
+                              cancelButtonTitle:nil
+                              otherButtonTitles:@"OK", nil] show];
             self.recorder = nil;
             return;
         }
@@ -697,10 +711,7 @@ static const int kInputChannelsChangedContext;
         _recordButton.selected = YES;
         
         [_audioController addOutputReceiver:_recorder];
-        // Add the input receiver, if _inputRecordingEnabled == true
-        if (_inputRecordingEnabled) {
-            [_audioController addInputReceiver:_recorder];
-        }
+        [_audioController addInputReceiver:_recorder];
     }
 }
 
@@ -719,11 +730,11 @@ static const int kInputChannelsChangedContext;
         self.player = [AEAudioFilePlayer audioFilePlayerWithURL:[NSURL fileURLWithPath:path] error:&error];
         
         if ( !_player ) {
-            [[[UIAlertView alloc] initWithTitle:@"Error" 
-                                         message:[NSString stringWithFormat:@"Couldn't start playback: %@", [error localizedDescription]]
-                                        delegate:nil
-                               cancelButtonTitle:nil
-                               otherButtonTitles:@"OK", nil] show];
+            [[[UIAlertView alloc] initWithTitle:@"Error"
+                                        message:[NSString stringWithFormat:@"Couldn't start playback: %@", [error localizedDescription]]
+                                       delegate:nil
+                              cancelButtonTitle:nil
+                              otherButtonTitles:@"OK", nil] show];
             return;
         }
         
@@ -761,7 +772,7 @@ static inline float translate(float val, float min, float max) {
                                         10);
     
     _outputLevelLayer.frame = CGRectMake(headerView.bounds.size.width/2.0,
-                                         _outputLevelLayer.frame.origin.y, 
+                                         _outputLevelLayer.frame.origin.y,
                                          translate(outputAvg, -20, 0) * (headerView.bounds.size.width/2.0 - 15.0),
                                          10);
     
